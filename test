@@ -1,0 +1,111 @@
+
+import os
+import choose_action
+import environment
+from sklearn import preprocessing
+import pandas as pd
+import tensorflow as tf
+import math 
+
+
+end_of_season=172
+seq_len=4
+hidden_size=256
+dropout_size=0.2
+batch_size=64
+
+
+
+
+ 
+dataset='test_data.csv'
+df=pd.read_csv(dataset)
+    #df.dropna(inplace=True)
+
+df.set_index('date', inplace=True)
+    #df.dropna(inplace=True)
+df.dropna(inplace=True)
+df.drop(['Tmin','Tmax', 'Humidity_min',  'Humidity_max','Solar R_Avg'],axis=1 ,inplace=True)
+df.dropna(inplace=True)
+
+
+    
+    
+df=data_preprocessing(df)
+
+def concat(x,s):
+        s=tf.convert_to_tensor(s,tf.float32)
+        
+            
+        s=np.expand_dims(s,axis=1)
+        x=tf.convert_to_tensor(x,tf.float32)
+        s=tf.concat((x,s),axis=1)
+       # s=tf.reshape(s,shape=[s.shape[0]*s.shape[1]])
+        
+        return s
+
+
+
+
+seq_len=4        
+
+new_stats=[]
+
+steps=seq_len
+
+n_games=len(df)/172
+steps=4
+irr=[]
+wctot=[]
+for i in range(2):
+        states=deque((df.values[steps-seq_len+j][-2] for j in range(seq_len)) , maxlen=seq_len)
+        actions=deque((0 for j in range(seq_len)), maxlen=seq_len)
+        new_states=deque([df.values[0][-2]  for j in range(seq_len)],maxlen=seq_len)
+        X_train=deque((df.values[steps-seq_len+j][:-3] for j in range(seq_len)) , maxlen=seq_len)
+        
+        st=concat(X_train,states)
+        current_state= st#first state at the begining of the season
+        done=False
+        score=0
+        irr_=0
+        
+        while not done:
+             for k in range(steps,steps+seq_len):
+                    
+                      
+                if k==steps:
+            
+                    state= tf.expand_dims(st, axis=0)
+                     action_num=np.argmax(model.predict(np.array(state))[0])
+                     action=choose_action(action_num)
+                     actions.append(action)
+                     irr.append(action*60)
+                else:
+                    
+                     actions.append(0)
+                new_state,reward,y,done,s=env.step(states,actions,X_train,k)
+                
+                     
+                if k==steps:
+                
+                    wctot.append(new_state[0,0])
+               
+                new_states.append(new_state[0,0])
+                X_train.append(df.values[k][:-3])
+                states.append(new_state[0,0])
+                st=concat(X_train,states)
+                score += reward
+                
+                    
+                 
+             new_st=concat(X_train,new_states)
+
+             
+             current_state=new_st
+             steps+=seq_len  
+             
+        steps=steps%len(df)+seq_len
+        print(f'episode={ i}, score= {score}')  
+        print(8.482*y, s*60, irr_)     
+
+      
