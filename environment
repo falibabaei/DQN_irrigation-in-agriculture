@@ -4,8 +4,8 @@ import tensorflow as tf
 #hyperparameters 
 end_of_season=172  # length of a season
 seq_len=4 
-lstm_TSW=tf.keras.models.load_model('C:/Users/Saeid/PycharmProjects/pythonProject/SoilWater_fadagosa.h5') #model prediction fro water content
-lstm_y=tf.keras.models.load_model('C:/Users/Saeid/PycharmProjects/pythonProject/yeild_estimation_fadagosa.h5') #predict yield at the end of season
+lstm_TSW=tf.keras.models.load_model('SoilWater_fadagosa.h5') #model prediction fro water content
+lstm_y=tf.keras.models.load_model('yeild_estimation_fadagosa.h5') #predict yield at the end of season
 # the environment determine the next state, rewad and if it is the end of season.
 class env():
     def __init__(self,max_action=40.0, min_action=0.0, price_w=0.5, price_y=728.20,
