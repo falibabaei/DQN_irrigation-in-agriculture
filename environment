@@ -1,0 +1,82 @@
+
+end_of_season=172  # length of a season
+seq_len=4 
+lstm_TSW=tf.keras.models.load_model('C:/Users/Saeid/PycharmProjects/pythonProject/SoilWater_fadagosa.h5') #model prediction fro water content
+lstm_y=tf.keras.models.load_model('C:/Users/Saeid/PycharmProjects/pythonProject/yeild_estimation_fadagosa.h5') #predict yield at the end of season
+# the environment determine the next state, rewad and if it is the end of season.
+class env():
+    def __init__(self,max_action=40.0, min_action=0.0, price_w=0.5, price_y=728.20,
+                 min_reward=1500, max_rewards=float('inf') ,fc=100, wp=0,
+                 total_action=0):
+
+        self.price_w=price_w #price per liter water
+        self.price_y=price_y #tomato price dollar/ton
+        self.total_action=total_action 
+        
+        self.s=[] # to save the state of a season and predict the end of season reward 
+        self.x=list() # to save the state of a season and predict the end of season reward 
+        self.a=[] # to save action during season and predict the end of season reward 
+        
+    def step(self,current_state,action,X_train,day):
+               
+        if   day%172==seq_len: #length of a season=172
+        #saving the state and action during the season
+            for j in range(len(X_train)):
+                self.x.append(X_train[j])
+                self.s.append(current_state[j])
+                self.a.append(action[j])
+        else:
+           self.x.append(X_train[-1])
+           self.s.append(current_state[-1])
+           self.a.append(action[-1])
+        current_state=np.array(current_state,dtype=np.float32)
+        current_state=np.expand_dims(current_state,axis=1)
+        
+        action=np.array(action,dtype=np.float32)
+        action=np.expand_dims(action,axis=1)
+        
+        
+        X_train=np.array(X_train,dtype=np.float32)
+        
+        X=np.concatenate((X_train,action,current_state),axis=1)
+   
+        X=np.expand_dims(X,axis=0)
+        
+        #predict the next water content in the soil profile 
+        new_state=lstm_TSW.predict(X) #x=current state
+        
+    
+        
+        
+        #check if it is alredy end of season or not
+        if not (day+1)% end_of_season:
+            done=True
+            self.x=np.array(self.x,dtype=np.float32)
+            
+            self.s=np.array(self.s,dtype=np.float32)
+            self.s=np.expand_dims(self.s,axis=1)
+            self.a=np.array(self.a,dtype=np.float32)
+            self.a=np.expand_dims(self.a,axis=1)
+            X_n2=np.concatenate((self.x,self.a,self.s),axis=1)
+        
+
+            X_n2=np.expand_dims(X_n2,axis=0)
+            X_n2=tf.convert_to_tensor(X_n2,dtype=np.float64)
+            
+            #if it is end of season the yield will be calculated
+            yield=lstm_y.predict(X_n2)
+            self.s=[]
+            self.a=[]
+            self.x=[]
+            reward=-self.total_action*self.price_w*(60)+self.price_y*yield[0,0]*(8387*0.0011023)#60=max_actionand 8387=max yield
+            s=self.total_action
+            self.total_action=0
+        else:
+            reward=0
+            done=False
+            self.total_action+=action[-1]
+            s=0
+            yield=np.zeros(shape=(1,1))
+            
+        return new_state,math.log(reward+1),yield[0,0], done,s #s= total irrigation amount durin a season
+    
