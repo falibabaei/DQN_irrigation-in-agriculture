@@ -1,0 +1,192 @@
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout,Conv1D,Input,MaxPooling1D,Activation,Flatten
+from tensorflow.keras.optimizers import Adam
+from collections import deque
+import numpy as np
+import  random
+from tqdm import tqdm
+import os
+import time
+
+import tensorflow as tf
+from tensorflow.keras.callbacks import TensorBoard
+
+
+
+#set set to get same result 
+tf.random.set_seed(1)
+random.seed(1)
+np.random.seed(1)
+
+#set hyperparameters
+replay_memory_size=10_000
+MIN_REPLAY_MEMORY_SIZE = 2_000
+batch_size=64
+Discount=0.99
+hidden_size=256
+dropout_size=0.2
+num_of_actions=12
+
+
+MIN_REWARD = -200  # For model save
+UPDATE_TARGET_EVERY = 50
+
+# Exploration settings
+epsilon = 1 
+EPSILON_DECAY = 0.9997
+MIN_EPSILON = 0.001
+
+
+
+# Own Tensorboard class
+class ModifiedTensorBoard(TensorBoard):
+
+    # Overriding init to set initial step and writer (we want one log file for all .fit() calls)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.step = 1
+        self.writer = tf.summary.create_file_writer(self.log_dir)
+        self._log_write_dir = os.path.join(self.log_dir, MODEL_NAME)
+
+    # Overriding this method to stop creating default log writer
+    def set_model(self, model):
+        pass
+
+    # Overrided, saves logs with our step number
+    # (otherwise every .fit() will start writing from 0th step)
+    def on_epoch_end(self, epoch, logs=None):
+        self.update_stats(**logs)
+
+    # Overrided
+    # We train for one batch only, no need to save anything at epoch end
+    def on_batch_end(self, batch, logs=None):
+        pass
+
+    # Overrided, so won't close writer
+    def on_train_end(self, _):
+        pass
+
+    def on_train_batch_end(self, batch, logs=None):
+        pass
+
+
+    # Custom method for saving own metrics
+    # Creates writer, writes custom metrics and closes writer
+    def update_stats(self, **stats):
+        self._write_logs(stats, self.step)
+
+    def _write_logs(self, logs, index):
+        with self.writer.as_default():
+            for name, value in logs.items():
+                tf.summary.scalar(name, value, step=index)
+                self.step += 1
+                self.writer.flush()
+                
+ #define the model to predict q-tabel               
+class MyModel(tf.keras.Model):
+    def __init__(self, num_actions,name='DQN', chkpt_dir='C:/Users/Saeid/PycharmProjects/pythonProject/tmp'):
+        super(MyModel, self).__init__()
+
+        self.lstm1=tf.keras.layers.LSTM(hidden_size, activation='tanh',return_sequences=True)
+        self.drop=tf.keras.layers.Dropout(dropout_size)
+        self.lstm2=tf.keras.layers.LSTM(hidden_size,activation='tanh',return_sequences=False)
+        self.drop1=tf.keras.layers.Dropout(dropout_size)
+        self.dense=tf.keras.layers.Dense(num_actions, activation=None)
+        self.checkpoint_dir = chkpt_dir
+        self.model_name=name
+        self.checkpoint_file = os.path.join(self.checkpoint_dir, 
+                    self.model_name+'.h5')
+
+    def call(self, inputs):
+        out=self.lstm1(inputs)
+        out=self.drop(out)
+        out=self.lstm2(out)
+        out=self.drop1(out)
+        output=self.dense(out)
+        return output                
+            
+class DQNagent():
+    def __init__(self):
+        #main model
+        self.model=MyModel(12, name=f'DQN_{int(time.time())}')
+        self.model.build((batch_size,4,7))
+        self.model.load_weights('C:/Users/Saeid//PycharmProjects/pythonProject/tmp/target_DQN_1618404767.h5')       
+    
+        self.gamma=0.99
+        #target model
+        self.target_model=MyModel(12,name=f'target_DQN_{int(time.time())}')
+        self.target_model.build((batch_size,4,7))
+        self.model.compile(loss="mse", optimizer=Adam(lr=0.001), metrics=['mae'])
+        self.target_model.set_weights(self.model.get_weights())
+        self.episode_memory=[]
+        self.replay_memory=deque(maxlen=replay_memory_size)
+        self.target_update_counter=0
+        self.tensorboard = ModifiedTensorBoard(log_dir=f"logs/DQN-saved-10-{int(time.time())}")
+        
+  
+    def update_replay_memory(self,transition,done):
+                self.replay_memory.append(transition)
+    #get action
+    def get_qs(self, state,epsilon,episode,evaluate=False):
+        
+        if evaluate:
+            state= tf.expand_dims(state, axis=0)
+            action=np.argmax(self.model.predict(np.array(state))[0])
+        else:    
+         
+            if np.random.uniform(0,1) > epsilon:
+                state= tf.expand_dims(state, axis=0)
+
+                action=np.argmax(self.model.predict(np.array(state))[0])
+            else:
+                action=np.random.randint(0,num_of_actions)
+        return action,random
+    #save and load the trained agent  
+    def save_models(self):
+        print('... saving models ...')
+        self.model.save_weights(self.model.checkpoint_file)
+        self.target_model.save_weights(self.target_model.checkpoint_file) 
+    def load_models(self):
+        print('... loading models ...')
+        self.model.load_weights(self.model.checkpoint_file)
+        self.target_model.load_weights(self.target_model.checkpoint_file)
+         
+    #train the agent    
+    def train(self, terminal_state):
+
+        # Start training only if certain number of samples is already saved
+        if len(self.replay_memory) < MIN_REPLAY_MEMORY_SIZE:
+            return
+
+        # Get a minibatch of random samples from memory replay table
+        minibatch = random.sample(self.replay_memory,batch_size)
+
+        
+        current_states = np.array([transition[0] for transition in minibatch]) #(batch_Size,4,7)
+        current_qs_list = self.model.predict(current_states)
+        
+        new_current_states = np.array([transition[3] for transition in minibatch])
+        future_qs_list = self.target_model.predict(new_current_states)
+        
+        action=np.array([transition[1] for transition in minibatch])
+        reward=np.array([transition[2] for transition in minibatch])
+        done=np.array([transition[4] for transition in minibatch])
+
+        q_target=np.copy(current_qs_list )
+        batch_index=np.arange(len(minibatch),dtype=np.int32)
+        q_target[batch_index, action]=reward+self.gamma*np.max(future_qs_list,axis=1)*(1-done)
+            
+        self.model.fit(current_states, q_target, batch_size=len(minibatch), verbose=0, shuffle=False, callbacks=[self.tensorboard] if terminal_state else None)
+        if terminal_state:
+            self.target_update_counter += 1
+        #updat weights of model
+        if self.target_update_counter > UPDATE_TARGET_EVERY:
+            q_network_theta = self.model.get_weights()
+            target_network_theta = self.target_model.get_weights()
+            counter = 0
+            for q_weight, target_weight in zip(q_network_theta,target_network_theta):
+                target_weight = target_weight * (1-0.002) + q_weight * 0.002
+                target_network_theta[counter] = target_weight
+                counter += 1
+            self.target_model.set_weights(target_network_theta)
