@@ -1,0 +1,29 @@
+#choose action between 0 to 60 mm
+
+def choose_action(action_num):
+    if action_num==0:
+         action=0
+    elif action_num==1:
+         action=10/60
+    elif action_num==2:
+         action=15/60
+    elif action_num==3:
+         action=20/60
+    elif action_num==4:
+         action=25/60
+    elif action_num==5:
+         action=30/60
+    elif action_num==6:
+         action=35/60
+    elif action_num==7:
+         action=40/60
+    elif action_num==8:
+         action=45/60
+    elif action_num==9:
+         action=50/60
+    elif action_num==10:
+         action=55/60
+    elif action_num==11:
+         action=60/60
+         
+    return action
