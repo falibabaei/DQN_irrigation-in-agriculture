@@ -1,4 +1,7 @@
+import numpy as np
+import tensorflow as tf
 
+#hyperparameters 
 end_of_season=172  # length of a season
 seq_len=4 
 lstm_TSW=tf.keras.models.load_model('C:/Users/Saeid/PycharmProjects/pythonProject/SoilWater_fadagosa.h5') #model prediction fro water content
