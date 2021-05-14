@@ -1,0 +1,114 @@
+import env
+import agent
+import choose_action
+from sklearn import preprocessing
+import pandas as pd
+from collections import deque
+
+
+
+
+env=env()
+agent=DQNagent()
+choose_action=choose_action
+
+import dataset
+dataset='soilwat_f_4days.csv'
+df=pd.read_csv(dataset)
+df.set_index('date', inplace=True)
+df.dropna(inplace=True)
+
+#preprocessing the dataset usin Min_Max
+def data_preprocessing(df):
+        values=df.values
+        scaler=preprocessing.MinMaxScaler()
+        values_normal=scaler.fit_transform(values)
+        df=pd.DataFrame(values_normal, columns= df.columns, index=df.index)
+        return df, scaler
+ 
+df,scaler=data_preprocessing(df)
+
+best_score=-100
+n_games=10_000
+    
+score_history=[]
+avg_rewards = []
+steps=seq_len=4
+#concat the climate data and soil water content
+def concat(x,s):
+        s=tf.convert_to_tensor(s,tf.float32)
+        s=np.expand_dims(s,axis=1)
+        x=tf.convert_to_tensor(x,tf.float32)
+        s=tf.concat((x,s),axis=1)
+        return s
+#train the model
+for i in range(n_games):
+
+        agent.tensorboard.step = i
+        #set the First state, action, next_state
+        states=deque((df.values[steps-seq_len+j][-2] for j in range(seq_len)) , maxlen=seq_len)
+        actions=deque((0 for j in range(seq_len)), maxlen=seq_len)
+        new_states=deque([df.values[0][-2]  for j in range(seq_len)],maxlen=seq_len)
+        X_train=deque((df.values[steps-seq_len+j][:-3] for j in range(seq_len)) , maxlen=seq_len)
+        st=concat(X_train,states)
+        current_state= st#first state at the begining of the season
+
+        done=False
+        score=0
+        while not done:
+         # the action was selected every 4 days
+             for k in range(steps,steps+seq_len):
+           
+                if k==steps:
+                 
+             # Get action from Q table
+                 action_num,ran = agent.get_qs(st,epsilon,i)
+                 action=choose_action(action_num)
+                 actions.append(action)
+                 
+                else:
+                    actions.append(0)
+                    
+                      
+                    
+                new_state,reward,y,done,s=env.step(states,actions,X_train,k)
+               
+                new_states.append(new_state[0,0])
+                X_train.append(df.values[k][:-3])
+                states.append(new_state[0,0])
+                st=concat(X_train,states)
+                score += reward
+                
+                    
+                 
+             new_st=concat(X_train,new_states)
+             agent.update_replay_memory((current_state, action_num, reward, new_st, done),done)
+             agent.train(done)
+             
+             current_state=new_st
+             steps+=seq_len  
+             
+        steps=steps%len(df)+seq_len
+        print(f'episode={ i}, score= {score}, avg score=  {score}')  
+        print(y, s)        
+        score_history.append(score)
+        
+        if not i % 50:
+               average_reward = np.mean(score_history[-50:])
+               min_reward = min(score_history[-50:])
+              
+               max_reward = max(score_history[-50:])
+               
+               agent.tensorboard.update_stats(reward_avg=average_reward,reward_min=min_reward, 
+                                              reward_max=max_reward, epsilon=epsilon)
+                              
+               if avg> best_score:
+                   best_score=avg
+                   agent.save_models()
+    # Decay epsilon
+        if epsilon > MIN_EPSILON:
+            epsilon *= EPSILON_DECAY
+            epsilon = max(MIN_EPSILON, epsilon)
+
+
+    
