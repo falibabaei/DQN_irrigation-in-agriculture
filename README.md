@@ -1,4 +1,4 @@
-# DQN_irrigation-in-agriculture
+## Irrigation Optimization with a Deep Reinforcement Learning model - Case study on a site in Portugal
  we trained a deep Q(LSTM)-Networks network model that uses histirocal cliamte data, soil moisture and evapotranspiration, and simply tells farmers when and how much 
  to irrigate to achieve the best productivity without wasting water for a tomato field. 
 
