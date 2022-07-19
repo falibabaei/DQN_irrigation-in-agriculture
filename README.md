@@ -30,9 +30,13 @@ For more information about the version see requirement.txt
 ## About the Model
 
 choos_action:  Number of actions that agent can selected from them
+
 Agent:  Contains the class of DQN agent and training the model.
+
 environment: A class that define the environment of the agent.
+
 test: test the trained agent on the test set.
+
 train: training the agent
 
 ## Citation
